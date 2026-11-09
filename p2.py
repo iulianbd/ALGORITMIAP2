@@ -153,3 +153,5 @@ def plot_single_curve(
 
     # Mostrar la figura en pantalla.
     plt.show()
+
+# LIRAS, ns si se utilizaran las funciones time_measure y plot_single_curve para las graficas de despues, pero las he metido por si acaso.
