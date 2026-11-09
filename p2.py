@@ -1,7 +1,7 @@
 #Utilidades para medir tiempos de ejecución y representar resultados.
 
 from collections.abc import Callable, Iterable, Sequence
-from typing import Any
+from typing import Any, Dict, List, Tuple
 import time  # Proporciona temporizadores de alta resolución.
 
 import matplotlib.pyplot as plt  # Biblioteca utilizada para crear gráficas.
@@ -155,3 +155,145 @@ def plot_single_curve(
     plt.show()
 
 # LIRAS, ns si se utilizaran las funciones time_measure y plot_single_curve para las graficas de despues, pero las he metido por si acaso.
+
+
+# =============================================================================
+# I. PROBLEMA DEL CAMBIO DE MONEDAS
+# =============================================================================
+
+
+def greedy_change(coins: List[int], amount: int) -> Tuple[List[int], int]:
+    """Calcula un cambio mediante la estrategia codiciosa.
+
+    En cada paso se elige la moneda de mayor valor que no supera la cantidad
+    restante. La lista ``coins`` no tiene por qué estar ordenada.
+
+    Args:
+        coins: Valores de las monedas disponibles (enteros positivos, sin
+            repetir). Se supone un número ilimitado de cada una.
+        amount: Cantidad objetivo (entero no negativo).
+
+    Returns:
+        Una tupla ``(selected, remainder)`` donde ``selected`` contiene las
+        monedas elegidas (de mayor a menor) y ``remainder`` la cantidad que
+        no ha podido completarse. Si ``remainder == 0`` la solución es exacta.
+
+    Raises:
+        ValueError: Si ``amount`` es negativo.
+    """
+    if amount < 0:
+        raise ValueError("amount no puede ser negativo")
+
+    selected: List[int] = []
+    remainder: int = amount
+
+    # Ordenar de mayor a menor permite aplicar el criterio codicioso
+    # recorriendo las monedas una sola vez. sorted() no modifica la entrada.
+    for coin in sorted(coins, reverse=True):
+        if coin > remainder:
+            continue
+        # Tomar la moneda tantas veces como quepa equivale a elegirla
+        # repetidamente mientras no supere la cantidad restante.
+        count: int = remainder // coin
+        selected.extend([coin] * count)
+        remainder -= coin * count
+        if remainder == 0:
+            break
+
+    return selected, remainder
+
+
+def optimal_change(coins: List[int], amount: int) -> List[int] | None:
+    """Calcula el cambio con el menor número de monedas (programación dinámica).
+
+    Si hay varias soluciones con el mínimo número de monedas, se devuelve la
+    lexicográficamente mayor tras ordenar cada combinación de mayor a menor.
+
+    Args:
+        coins: Valores de las monedas disponibles (enteros positivos, sin
+            repetir). Se supone un número ilimitado de cada una.
+        amount: Cantidad objetivo (entero no negativo).
+
+    Returns:
+        Lista de monedas (de mayor a menor) con el mínimo número de monedas,
+        ``[]`` si ``amount == 0`` o ``None`` si no existe combinación exacta.
+
+    Raises:
+        ValueError: Si ``amount`` es negativo.
+    """
+    if amount < 0:
+        raise ValueError("amount no puede ser negativo")
+    if amount == 0:
+        return []
+
+    # Monedas de mayor a menor: facilita la reconstrucción lexicográfica.
+    sorted_coins: List[int] = sorted(set(coins), reverse=True)
+
+    # min_coins[a] = mínimo número de monedas para obtener a (INF si imposible).
+    INF: float = float("inf")
+    min_coins: List[float] = [0] + [INF] * amount
+
+    for a in range(1, amount + 1):
+        for coin in sorted_coins:
+            if coin <= a and min_coins[a - coin] + 1 < min_coins[a]:
+                min_coins[a] = min_coins[a - coin] + 1
+
+    if min_coins[amount] == INF:
+        return None
+
+    # Reconstrucción: en cada paso se elige la moneda MÁS GRANDE que mantiene
+    # la optimalidad. La mayor moneda presente en alguna solución óptima es
+    # el primer elemento de la combinación lexicográficamente mayor, y al
+    # repetir el razonamiento sobre el resto las monedas salen ya ordenadas
+    # de mayor a menor.
+    result: List[int] = []
+    remaining: int = amount
+    while remaining > 0:
+        for coin in sorted_coins:
+            if coin <= remaining and min_coins[remaining - coin] == min_coins[remaining] - 1:
+                result.append(coin)
+                remaining -= coin
+                break
+
+    return result
+
+
+def compare_change(coins: List[int], max_amount: int) -> Dict[str, List[int]]:
+    """Compara la solución codiciosa con la óptima para las cantidades 1..max_amount.
+
+    Args:
+        coins: Valores de las monedas disponibles.
+        max_amount: Cantidad máxima a evaluar (incluida).
+
+    Returns:
+        Diccionario con las claves ``"optimal"``, ``"suboptimal"``,
+        ``"greedy_failed"`` e ``"impossible"``, cada una asociada a la lista
+        de cantidades (en orden creciente) que pertenecen a esa categoría:
+
+        * optimal: greedy es exacto y usa el mínimo número de monedas.
+        * suboptimal: greedy es exacto pero usa más monedas que el óptimo.
+        * greedy_failed: greedy no es exacto aunque existe solución exacta.
+        * impossible: no existe ninguna combinación exacta.
+    """
+    result: Dict[str, List[int]] = {
+        "optimal": [],
+        "suboptimal": [],
+        "greedy_failed": [],
+        "impossible": [],
+    }
+
+    for amount in range(1, max_amount + 1):
+        greedy_selected, remainder = greedy_change(coins, amount)
+        best: List[int] | None = optimal_change(coins, amount)
+
+        if best is None:
+            # Si no hay solución exacta, greedy tampoco puede encontrarla.
+            result["impossible"].append(amount)
+        elif remainder != 0:
+            result["greedy_failed"].append(amount)
+        elif len(greedy_selected) == len(best):
+            result["optimal"].append(amount)
+        else:
+            result["suboptimal"].append(amount)
+
+    return result
